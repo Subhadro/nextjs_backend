@@ -4,7 +4,7 @@ import bcryptjs from "bcryptjs";
 import {sendEmail} from "@/helpers/mailer";
 import { User } from "@/models/user.model";
 
-connect();
+await connect();
 
 //Export an async function called POST that takes a NextRequest as an argument
 export async function POST(request: NextRequest) {
@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
 		const {username, email, password} = reqBody;
 		//Validation
 
-		console.log(reqBody);
+		console.log("Request body:", reqBody);
 		const user = await User.findOne({email});
 		if (user) {
 			return NextResponse.json(
@@ -22,18 +22,23 @@ export async function POST(request: NextRequest) {
 			);
 		}
 		const salt = await bcryptjs.genSalt(10);
-		const hashedPassword = bcryptjs.hash(password, salt);
+		const hashedPassword = await bcryptjs.hash(password, salt);
 		const newUser = new User({
 			username,
 			email,
 			password: hashedPassword,
 		});
+		console.log("New user object before save:", newUser);
 		const savedUser = await newUser.save();
-		console.log(savedUser);
+		console.log("Saved user:", savedUser);
 
 		//send verification sendEmail
-
-		await sendEmail({email, emailType: "VERIFY", userId: savedUser._id});
+		try {
+			await sendEmail({email, emailType: "VERIFY", userId: savedUser._id});
+		} catch (emailError) {
+			console.error("Error sending verification email:", emailError);
+			// Continue with the signup process even if email fails
+		}
 
 		return NextResponse.json({
 			message: "User registered successfully",
@@ -41,8 +46,12 @@ export async function POST(request: NextRequest) {
 			savedUser,
 		});
 	} catch (error) {
+		console.error("Detailed error:", error);
 		return NextResponse.json(
-			{message: "Something went wrong at signup route", error},
+			{
+				message: "Something went wrong at signup route", 
+				error: error instanceof Error ? error.message : String(error)
+			},
 			{status: 500}
 		);
     }
